@@ -17,9 +17,9 @@ indicate the pitch correction's direction, if any.
 const int MIC_PIN = A0; // analog input
 const int POT_PIN = A1; // analog input
 const int SERVO_PIN = 11; // PWM output
-const int LED_SHORTEN = 3; // digital output
-const int LED_GOOD = 4; // digital output
-const int LED_LENGTHEN = 5; // digital output
+const int LED_SHORTEN = 8; // digital output
+const int LED_GOOD = 9; // digital output
+const int LED_LENGTHEN = 10; // digital output
 
 
 Servo servo;
