@@ -119,12 +119,15 @@ void loop()
 		double peakPitch = freq2Pitch(peakFreq);
 		
 		// find pitch correction amount and corrected freqency
-		double corr = correction(peakPitch, analogRead(POT_PIN));
-		double correctedFreq = pitch2Freq(peakPitch + corr);
+		double pitchCorr = correction(peakPitch, analogRead(POT_PIN));
+		double correctedFreq = pitch2Freq(peakPitch + pitchCorr);
 		
 		updateServo(peakFreq, correctedFreq);
 		
-		updateLEDs(corr, 0.10); // tolerance units: MIDI pitch
+		updateLEDs(pitchCorr, 0.10); // tolerance units: MIDI pitch
+		
+		Serial.print("peakFreq = "); Serial.println(peakFreq);
+		Serial.print("pitchCorr = "); Serial.println(pitchCorr);
 	}
 }
 
@@ -152,17 +155,17 @@ double correction(double pitchIn, double strength)
 }
 
 // update the LEDs based on amount of correction applied
-void updateLEDs(double corr, double tol)
+void updateLEDs(double pitchCorr, double tol)
 {
 	// choose which LED to light
-	if (corr > tol)
+	if (pitchCorr > tol)
 	{
 		// indicate that the tube is being shortened (pitch raised)
 		digitalWrite(LED_SHORTEN, HIGH);
 		digitalWrite(LED_GOOD, LOW);
 		digitalWrite(LED_LENGTHEN, LOW);
 	}
-	else if (corr < -tol)
+	else if (pitchCorr < -tol)
 	{
 		// indicate that the tube is being lengthened (pitch lowered)
 		digitalWrite(LED_SHORTEN, LOW);
