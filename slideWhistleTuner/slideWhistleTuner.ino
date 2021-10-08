@@ -17,9 +17,9 @@ indicate the pitch correction's direction, if any.
 const int MIC_PIN = 0; // analog input
 const int POT_PIN = 1; // analog input
 const int SERVO_PIN = 2; // PWM output
-const int LED_UP = 3; // digital output
+const int LED_SHORTEN = 3; // digital output
 const int LED_GOOD = 4; // digital output
-const int LED_DOWN = 5; // digital output
+const int LED_LENGTHEN = 5; // digital output
 
 
 Servo servo;
@@ -79,9 +79,9 @@ void setup()
 	pinMode(MIC_PIN, INPUT);
 	pinMode(POT_PIN, INPUT);
 	servo.attach(SERVO_PIN);
-	pinMode(LED_UP, OUTPUT);
+	pinMode(LED_SHORTEN, OUTPUT);
 	pinMode(LED_GOOD, OUTPUT);
-	pinMode(LED_DOWN, OUTPUT);
+	pinMode(LED_LENGTHEN, OUTPUT);
 	
 	Serial.begin(9600); // TODO remove for faster loop speed?
 	
@@ -157,24 +157,24 @@ void updateLEDs(double corr, double tol)
 	// choose which LED to light
 	if (corr > tol)
 	{
-		// light the LED for high
-		digitalWrite(LED_UP, HIGH);
+		// indicate that the tube is being shortened (pitch raised)
+		digitalWrite(LED_SHORTEN, HIGH);
 		digitalWrite(LED_GOOD, LOW);
-		digitalWrite(LED_DOWN, LOW);
+		digitalWrite(LED_LENGTHEN, LOW);
 	}
 	else if (corr < -tol)
 	{
-		// light the LED for down
-		digitalWrite(LED_UP, LOW);
+		// indicate that the tube is being lengthened (pitch lowered)
+		digitalWrite(LED_SHORTEN, LOW);
 		digitalWrite(LED_GOOD, LOW);
-		digitalWrite(LED_DOWN, HIGH);
+		digitalWrite(LED_LENGTHEN, HIGH);
 	}
 	else
 	{
-		// light the LED for good
-		digitalWrite(LED_UP, LOW);
+		// indicate that the tube is being minimally corrected (pitch is good)
+		digitalWrite(LED_SHORTEN, LOW);
 		digitalWrite(LED_GOOD, HIGH);
-		digitalWrite(LED_DOWN, LOW);
+		digitalWrite(LED_LENGTHEN, LOW);
 	}
 }
 
