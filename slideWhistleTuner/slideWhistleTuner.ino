@@ -14,9 +14,9 @@ indicate the pitch correction's direction, if any.
 #include <Servo.h>
 
 // Arduino pins
-const int MIC_PIN = 0; // analog input
-const int POT_PIN = 1; // analog input
-const int SERVO_PIN = 2; // PWM output
+const int MIC_PIN = A0; // analog input
+const int POT_PIN = A1; // analog input
+const int SERVO_PIN = 11; // PWM output
 const int LED_SHORTEN = 3; // digital output
 const int LED_GOOD = 4; // digital output
 const int LED_LENGTHEN = 5; // digital output
