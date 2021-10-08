@@ -3,17 +3,29 @@
 Original Author: Clyde A. Lettsome, PhD, PE, MEM
 Adapted significantly by Isaac Newcomb
 
-Description: This code/sketch makes displays the approximate frequency of the loudest sound detected by a sound detection module. For this project, the analog output from the
-sound module detector sends the analog audio signal detected to A0 of the Arduino Uno. The analog signal is sampled and quantized (digitized). A Fast Fourier Transform (FFT) is
-then performed on the digitized data. The FFT converts the digital data from the approximate discrete-time domain result. The maximum frequency of the approximate discrete-time
-domain result is then determined and displayed via the Arduino IDE Serial Monitor.
+This code uses the arduinoFFT library to identify the pitch produced by a slide
+whistle, find the nearest pitch in a specified scale, and adjust a servo to move the
+slide whistle's slide - thereby correcting the pitch produced. Three labeled LEDs
+indicate the pitch correction's direction, if any.
 
-Note: The arduinoFFT.h library needs to be added to the Arduino IDE before compiling and uploading this script/sketch to an Arduino.
+Description of original: This code/sketch makes displays the approximate frequency of
+the loudest sound detected by a sound detection module. For this project, the analog 
+output from the sound module detector sends the analog audio signal detected to A0 of
+the Arduino Uno. The analog signal is sampled and quantized (digitized). A Fast
+Fourier Transform (FFT) is then performed on the digitized data. The FFT converts the
+digital data from the approximate discrete-time domain result. The maximum frequency
+of the approximate discrete-time domain result is then determined and displayed via
+the Arduino IDE Serial Monitor.
 
-License: This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License (GPL) version 3, or any later
+Note: The arduinoFFT.h library needs to be added to the Arduino IDE before compiling
+and uploading this script/sketch to an Arduino.
+
+License: This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License (GPL) version 3, or any later
 version of your choice, as published by the Free Software Foundation.
 
-Notes: Copyright (c) 2019 by C. A. Lettsome Services, LLC. Revisions Copyright (c) 2021 Isaac Newcomb.
+Notes: Copyright (c) 2019 by C. A. Lettsome Services, LLC.
+Adaptations Copyright (c) 2021 Isaac Newcomb.
 For more information visit https://clydelettsome.com/blog/2019/12/18/my-weekend-project-audio-frequency-detector-using-an-arduino/
 
 */
@@ -128,7 +140,7 @@ void loop()
 		
 		// find pitch correction amount and corrected freqency
 		double corr = correction(peakPitch, analogRead(POT_PIN));
-		double correctedFreq = pitch2Freq(pitchIn + corr);
+		double correctedFreq = pitch2Freq(peakPitch + corr);
 		
 		updateServo(correctedFreq, peakFreq);
 		
@@ -191,7 +203,7 @@ void updateLEDs(double corr, double tol)
 void updateServo(double correctedFreq, double realFreq)
 {
 	// convert to servo angle and move servo
-	double realLength = ((SOUND_SPEED / peakFreq) * 1000.0) / 4.0; // mm
+	double realLength = ((SOUND_SPEED / realFreq) * 1000.0) / 4.0; // mm
 	double desiredLength = ((SOUND_SPEED / correctedFreq) * 1000.0) / 4.0; // mm
 	double corrDist = desiredLength - realLength; // mm
 	
@@ -219,5 +231,5 @@ double freq2Pitch(double freq)
 
 double pitch2Freq(double pitch)
 {
-	return A4_FREQ * 2^((pitch - 69) / 12.0);
+	return A4_FREQ * pow(2, ((pitch - 69) / 12.0));
 }
