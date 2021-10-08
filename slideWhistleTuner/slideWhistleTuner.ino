@@ -1,32 +1,12 @@
 /*
 
-Original Author: Clyde A. Lettsome, PhD, PE, MEM
-Adapted significantly by Isaac Newcomb
+MAE 3780 Individual Project
+Isaac Newcomb (idn6)
 
 This code uses the arduinoFFT library to identify the pitch produced by a slide
 whistle, find the nearest pitch in a specified scale, and adjust a servo to move the
 slide whistle's slide - thereby correcting the pitch produced. Three labeled LEDs
 indicate the pitch correction's direction, if any.
-
-Description of original: This code/sketch makes displays the approximate frequency of
-the loudest sound detected by a sound detection module. For this project, the analog 
-output from the sound module detector sends the analog audio signal detected to A0 of
-the Arduino Uno. The analog signal is sampled and quantized (digitized). A Fast
-Fourier Transform (FFT) is then performed on the digitized data. The FFT converts the
-digital data from the approximate discrete-time domain result. The maximum frequency
-of the approximate discrete-time domain result is then determined and displayed via
-the Arduino IDE Serial Monitor.
-
-Note: The arduinoFFT.h library needs to be added to the Arduino IDE before compiling
-and uploading this script/sketch to an Arduino.
-
-License: This program is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License (GPL) version 3, or any later
-version of your choice, as published by the Free Software Foundation.
-
-Notes: Copyright (c) 2019 by C. A. Lettsome Services, LLC.
-Adaptations Copyright (c) 2021 Isaac Newcomb.
-For more information visit https://clydelettsome.com/blog/2019/12/18/my-weekend-project-audio-frequency-detector-using-an-arduino/
 
 */
 
@@ -128,8 +108,8 @@ void loop()
 		// TODO: does object construction take longer than the (deprecated) alternative?
 		
 		// do FFT on snippet of samples
-		// use hamming windowing to get narrower pitches with more frequency bleed
-		// use hann    windowing to get wider pitches and less frequency bleed
+		// use hamming windowing to get narrower peaks but more frequency bleed
+		// use hann    windowing to get wider    peaks but less frequency bleed
 		fft.Windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
 		fft.Compute(vReal, vImag, SAMPLES, FFT_FORWARD);
 		fft.ComplexToMagnitude(vReal, vImag, SAMPLES);
@@ -142,7 +122,7 @@ void loop()
 		double corr = correction(peakPitch, analogRead(POT_PIN));
 		double correctedFreq = pitch2Freq(peakPitch + corr);
 		
-		updateServo(correctedFreq, peakFreq);
+		updateServo(peakFreq, correctedFreq);
 		
 		updateLEDs(corr, 0.10); // tolerance units: MIDI pitch
 	}
@@ -200,7 +180,7 @@ void updateLEDs(double corr, double tol)
 
 // move the servo to the angle that yields a perfect correction;
 // otherwise rotate it to center.
-void updateServo(double correctedFreq, double realFreq)
+void updateServo(double realFreq, double correctedFreq)
 {
 	// convert to servo angle and move servo
 	double realLength = ((SOUND_SPEED / realFreq) * 1000.0) / 4.0; // mm
@@ -208,21 +188,11 @@ void updateServo(double correctedFreq, double realFreq)
 	double corrDist = desiredLength - realLength; // mm
 	
 	// servo angle is 0-180, so 90 is centered
-	if (corrDist > SERVO_ARM_LG)
-	{
-		// can't make tube long enough; make it as long as possible
-		servo.write(180);
-	}
-	else if (corrDist < -SERVO_ARM_LG)
-	{
-		// can't make tube short enough; make it as short as possible
-		servo.write(0);
-	}
-	else
-	{
-		servo.write(90 + asin(corrDist / SERVO_ARM_LG));
-	}
+	// compact syntax: (boolean expression) ? (true block) : (false block)
+	// write safe angle to servo, doing the trig calculation only if it'll yield a valid answer:
+	servo.write(corrDist < -SERVO_ARM_LG ? 0 : corrDist > SERVO_ARM_LG ? 180 : 90 + asin(corrDist / SERVO_ARM_LG));
 }
+
 
 double freq2Pitch(double freq)
 {
