@@ -145,7 +145,7 @@ void loop()
 }
 
 /*
-	find the signed distance (in millimeters) to the nearest valid note
+	finds the signed distance (in millimeters) to the nearest valid note
 */
 double mmError(double freq)
 {
@@ -155,7 +155,7 @@ double mmError(double freq)
 }
 
 /*
-	find the signed pitch distance to the nearest valid note,
+	finds the signed pitch distance to the nearest valid note,
 	comparing `pitchIn` to the set of desirable pitches
 */
 double pitchError(double pitchIn)
@@ -206,7 +206,7 @@ double pitchError(double pitchIn)
 }
 
 /*
-	move the servo such that the scotch yoke is `displacement` mm from center
+	moves the servo such that the scotch yoke is `x` mm from center
 */
 void slideTo(double x)
 {
@@ -225,7 +225,7 @@ void slideTo(double x)
 }
 
 /*
-	update the LEDs based on amount of correction applied
+	updates the LEDs based on amount of correction applied
 */
 void updateLEDs(double pitchCorr, double tol)
 {
