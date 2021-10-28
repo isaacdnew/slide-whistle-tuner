@@ -1,7 +1,7 @@
 /*
 
-MAE 3780 Individual Project
-Isaac Newcomb (idn6)
+SnapSlide: a pitch-corrected slide whistle
+MAE 3780 Individual Project — Isaac Newcomb (idn6@cornell.edu)
 
 This code uses the arduinoFFT library to identify the pitch produced by a slide
 whistle, find the nearest pitch in a specified scale, and adjust a servo to move the
