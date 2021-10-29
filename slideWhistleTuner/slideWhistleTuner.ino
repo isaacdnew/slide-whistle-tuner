@@ -25,6 +25,10 @@ const int LED_SHORTEN = 11; // digital out
 const int LED_GOOD = 12; // digital out
 const int LED_LENGTHEN = 13; // digital out
 
+// microphone
+const double MIN_VOLUME = 600; // minimum sample to consider as a signal
+double volume = 0; // the volume of the current
+
 // FFT
 arduinoFFT fft;
 const int SAMPLE_CT = 128; // must be a base 2 number; max 128 for Arduino Uno
@@ -42,6 +46,7 @@ Servo servo;
 const int SERVO_MIN = 470; // minimum pulse length (microseconds)
 const int SERVO_MAX = 2620; // maximum pulse length (microseconds)
 const double SERVO_ARM_LG = 15.0; // [mm]
+const double LG_TOL = 5; // how close the slide has to be to its ideal position before the green light turns on [mm]
 
 double servoX = 0; // position of scotch yoke relative to arduino [mm]
 double mmErr = 0; // given current pitch, signed distance to nearest good length [mm]
@@ -50,6 +55,16 @@ double p = 0; // proportional term for feedback control (controlled by potentiom
 /*
 	lists of target pitches - select by (un)commenting
 */
+
+// c pentatonic
+const int PITCH_CT = 21;
+const int PITCHES[PITCH_CT] =
+{
+	48, 50, 52, 55, 57,
+	60, 62, 64, 67, 69,
+	72, 74, 76, 79, 81,
+	84, 86, 88, 91, 93, 96
+};
 
 // // c major
 // const int PITCH_CT = 29;
@@ -81,12 +96,12 @@ double p = 0; // proportional term for feedback control (controlled by potentiom
 // 	84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96
 // };
 
-// just one note: A4
-const int PITCH_CT = 1;
-const int PITCHES[PITCH_CT] =
-{
-	69
-};
+// // just one note: A4
+// const int PITCH_CT = 1;
+// const int PITCHES[PITCH_CT] =
+// {
+// 	69
+// };
 
 void setup()
 {
@@ -103,20 +118,22 @@ void setup()
 	fft = arduinoFFT();
 	sampleBirthday = micros(); // pretend we just took a sample (to start the loop correctly)
 	
-	for (int i = 0; i < SAMPLE_CT; i++)
-	{
-		vImag[i] = 0; // imaginary part is always 0
-	}
-	
 }
 
 void loop()
 {
 	// get a snippet of samples
+	volume = 0; // discard old volume
 	for (int i = 0; i < SAMPLE_CT; i++)
 	{
 		sampleBirthday = micros(); // save sample birthday to the microsecond
 		vReal[i] = analogRead(MIC_PIN); // take a sample
+		vImag[i] = 0; // imaginary part is always 0
+		
+		if (vReal[i] > MIN_VOLUME)
+		{
+			volume = vReal[i];
+		}
 		
 		while(micros() < (sampleBirthday + SAMPLING_PERIOD))
 		{
@@ -124,24 +141,31 @@ void loop()
 		}
 	}
 	
-	// do FFT on the snippet of samples
-	// use hamming windowing to get narrower peaks but more frequency bleed
-	// use hann    windowing to get wider    peaks but less frequency bleed
-	fft.Windowing(vReal, SAMPLE_CT, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-	fft.Compute(vReal, vImag, SAMPLE_CT, FFT_FORWARD);
-	fft.ComplexToMagnitude(vReal, vImag, SAMPLE_CT);
+	// if it's loud enough that there's probably a signal...
+	if (volume >= MIN_VOLUME)
+	{
+		// do FFT on the snippet of samples
+		// use hamming windowing to get narrower peaks but more frequency bleed
+		// use hann    windowing to get wider    peaks but less frequency bleed
+		fft.Windowing(vReal, SAMPLE_CT, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+		fft.Compute(vReal, vImag, SAMPLE_CT, FFT_FORWARD);
+		fft.ComplexToMagnitude(vReal, vImag, SAMPLE_CT);
+		
+		// find dominant MIDI pitch (formula from https://newt.phys.unsw.edu.au/jw/notes.html)
+		double peakFreq = fft.MajorPeak(vReal, SAMPLE_CT, SAMPLING_FREQ);
+		
+		// TODO ignore bad peakFreq readings
+		
+		p = analogRead(POT_PIN) / 1024.0; // use potentiometer value as P gain
+		mmErr = mmError(peakFreq); // find error for feedback control
+		slideTo(servoX - p * mmErr); // move proportionally to error
+		updateLEDs(mmErr, LG_TOL); // indicate servo position with LEDs
+		
+		// Serial.print("freq   = "); Serial.println(peakFreq);
+		// Serial.print("mmErr  = "); Serial.println(mmErr);
+	}
 	
-	// find dominant MIDI pitch (formula from https://newt.phys.unsw.edu.au/jw/notes.html)
-	double peakFreq = fft.MajorPeak(vReal, SAMPLE_CT, SAMPLING_FREQ);
-	
-	// TODO ignore bad peakFreq readings
-	
-	p = analogRead(POT_PIN) / 1024.0; // use potentiometer value as P gain
-	mmErr = mmError(peakFreq); // find error for feedback control
-	slideTo(servoX - p * mmErr); // move proportionally to error
-	updateLEDs(servoX, 0.10); // indicate servo position with LEDs
-	
-	// Serial.print("mmErr = "); Serial.println(mmErr);
+	Serial.print("volume = "); Serial.println(volume);
 }
 
 /*
