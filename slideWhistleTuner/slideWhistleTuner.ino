@@ -141,7 +141,7 @@ void loop()
 		}
 	}
 	
-	// if it's loud enough that there's probably a signal...
+	// if it's loud enough that there's probably a note being played...
 	if (volume >= MIN_VOLUME)
 	{
 		// do FFT on the snippet of samples
