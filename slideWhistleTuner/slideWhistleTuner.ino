@@ -63,25 +63,25 @@ double mmErrOld = 0; // the previous mmErr (used to calculate deriv)
 	lists of target pitches - select by (un)commenting
 */
 
-// c pentatonic
-const int PITCH_CT = 21;
-const int PITCHES[PITCH_CT] =
-{
-	48, 50, 52, 55, 57,
-	60, 62, 64, 67, 69,
-	72, 74, 76, 79, 81,
-	84, 86, 88, 91, 93, 96
-};
-
-// // c major
-// const int PITCH_CT = 29;
+// // c pentatonic
+// const int PITCH_CT = 21;
 // const int PITCHES[PITCH_CT] =
 // {
-// 	48, 50, 52, 53, 55, 57, 59,
-// 	60, 62, 64, 65, 67, 69, 71,
-// 	72, 74, 76, 77, 79, 81, 83,
-// 	84, 86, 88, 89, 91, 93, 95, 96
+// 	48, 50, 52, 55, 57,
+// 	60, 62, 64, 67, 69,
+// 	72, 74, 76, 79, 81,
+// 	84, 86, 88, 91, 93, 96
 // };
+
+// c major
+const int PITCH_CT = 29;
+const int PITCHES[PITCH_CT] =
+{
+	48, 50, 52, 53, 55, 57, 59,
+	60, 62, 64, 65, 67, 69, 71,
+	72, 74, 76, 77, 79, 81, 83,
+	84, 86, 88, 89, 91, 93, 95, 96
+};
 
 // // c minor
 // const int PITCH_CT = 29;
