@@ -3,14 +3,17 @@
 SnapSlide: a pitch-corrected slide whistle
 MAE 3780 Individual Project — Isaac Newcomb (idn6@cornell.edu)
 
-This code uses the arduinoFFT library to identify the pitch produced by a slide
-whistle, find the nearest pitch in a specified scale, and adjust a servo to move the
-slide whistle's slide - thereby correcting the pitch produced. Three labeled LEDs
-indicate the pitch correction's direction, if any.
+This code uses elm-chan's ffft library to identify the pitch produced by a slide
+whistle, finds the distance to nearest pitch in a specified scale, and adjusts a
+servo to move the slide whistle's slide - thereby correcting the pitch produced.
+Three labeled LEDs indicate the pitch correction's direction, if any.
+
+Some of this code (along with the hardware requirements) is adapted from the Piccolo music visualizer by Adafruit:
+https://github.com/adafruit/Adafruit_Learning_System_Guides/tree/main/Tiny_Music_Visualizer
 
 */
 
-#include "arduinoFFT.h"
+#include "ffft.h"
 #include <Servo.h>
 
 // physical/musical constants
@@ -26,31 +29,35 @@ const int LED_GOOD = 12; // digital out
 const int LED_LENGTHEN = 13; // digital out
 
 // microphone
-const double MIN_VOLUME = 600; // minimum sample to consider as a signal
-double volume = 0; // the volume of the current
+const int MIN_LOUDNESS = 20; // minimum sample loudness to consider as a signal (0 - 511)
 
 // FFT
-arduinoFFT fft;
-const int SAMPLE_CT = 128; // must be a base 2 number; max 128 for Arduino Uno
-const int SAMPLING_FREQ = 4096; // must be twice the highest expected frequency
+const int SAMPLING_FREQ = 4096; // [Hz] - must be twice the highest expected frequency
 const int SAMPLING_PERIOD = round(1000000*(1.0/SAMPLING_FREQ)); // sampling period in microseconds
+int16_t   capture[FFT_N];    // Audio capture buffer
+complex_t bfly_buff[FFT_N];  // FFT "butterfly" buffer
+uint16_t  spectrum[FFT_N/2]; // Spectrum output buffer
+double peakFreq = 0; // the frequency of the highest peak
+// FFT_N is the number of samples per snippet. It's #defined in ffft.h as 128
 
-double vReal[SAMPLE_CT]; // create vector of size SAMPLE_CT to hold real values
-double vImag[SAMPLE_CT]; // empty; should initialize as 0s and remain as such
-bool snippetIsReady = false; // indicates when to recalculate the FFT
-long sampleBirthday; // the micros() time when the last sample was recorded
-int i = 0; // index of sample to record
-
-// servo and feedback control loop
+// servo
 Servo servo;
 const int SERVO_MIN = 470; // minimum pulse length (microseconds)
 const int SERVO_MAX = 2620; // maximum pulse length (microseconds)
 const double SERVO_ARM_LG = 15.0; // [mm]
 const double LG_TOL = 5; // how close the slide has to be to its ideal position before the green light turns on [mm]
-
 double servoX = 0; // position of scotch yoke relative to arduino [mm]
-double mmErr = 0; // given current pitch, signed distance to nearest good length [mm]
-double p = 0; // proportional term for feedback control (controlled by potentiometer)
+
+// PID control loop
+double P = 0; // proportional term in PID control - adjusted by potentiometer
+double I = 0; // integral term in PID control (not yet implemented - TODO)
+double D = 4; // derivative term in PID control
+
+double mmErr = 0; // signed distance to nearest good length [mm]
+double integ = 0; // sum of error over time [mm] (not yet implemented - TODO)
+double deriv = 0; // rate at which mmErr is changing [mm/s]
+
+double mmErrOld = 0; // the previous mmErr (used to calculate deriv)
 
 /*
 	lists of target pitches - select by (un)commenting
@@ -113,26 +120,21 @@ void setup()
 	pinMode(LED_GOOD, OUTPUT);
 	pinMode(LED_LENGTHEN, OUTPUT);
 	
-	Serial.begin(9600); // TODO remove for faster loop speed?
-	
-	fft = arduinoFFT();
-	sampleBirthday = micros(); // pretend we just took a sample (to start the loop correctly)
-	
+	Serial.begin(9600); // open serial connection for debugging
 }
 
 void loop()
 {
 	// get a snippet of samples
-	volume = 0; // discard old volume
-	for (int i = 0; i < SAMPLE_CT; i++)
+	int16_t loudness = 0; // reset loudness reading
+	for (int i = 0; i < FFT_N; i++)
 	{
-		sampleBirthday = micros(); // save sample birthday to the microsecond
-		vReal[i] = analogRead(MIC_PIN); // take a sample
-		vImag[i] = 0; // imaginary part is always 0
+		long sampleBirthday = micros(); // save when the sample was taken to the microsecond
+		capture[i] = analogRead(MIC_PIN) - 512; // take a sample, shifting to range [-512, 511]
 		
-		if (vReal[i] > MIN_VOLUME)
+		if (capture[i] > loudness)
 		{
-			volume = vReal[i];
+			loudness = capture[i];
 		}
 		
 		while(micros() < (sampleBirthday + SAMPLING_PERIOD))
@@ -141,32 +143,60 @@ void loop()
 		}
 	}
 	
+	// Serial.print("loudness = "); Serial.println(loudness);
+	
 	// if it's loud enough that there's probably a note being played...
-	if (volume >= MIN_VOLUME)
+	if (loudness >= MIN_LOUDNESS)
 	{
 		// do FFT on the snippet of samples
-		// use hamming windowing to get narrower peaks but more frequency bleed
-		// use hann    windowing to get wider    peaks but less frequency bleed
-		fft.Windowing(vReal, SAMPLE_CT, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-		fft.Compute(vReal, vImag, SAMPLE_CT, FFT_FORWARD);
-		fft.ComplexToMagnitude(vReal, vImag, SAMPLE_CT);
+		fft_input(capture, bfly_buff);   // Samples -> complex numbers in bfly_buff
+		fft_execute(bfly_buff);          // Process complex data
+		fft_output(bfly_buff, spectrum); // Complex -> frequency spectrum
 		
-		// find dominant MIDI pitch (formula from https://newt.phys.unsw.edu.au/jw/notes.html)
-		double peakFreq = fft.MajorPeak(vReal, SAMPLE_CT, SAMPLING_FREQ);
-		
-		// TODO ignore bad peakFreq readings
-		
-		p = analogRead(POT_PIN) / 1024.0; // use potentiometer value as P gain
-		mmErr = mmError(peakFreq); // find error for feedback control
-		slideTo(servoX - p * mmErr); // move proportionally to error
+		// analyze the FFT output and take action
+		peakFreq = majorPeak(spectrum, FFT_N, SAMPLING_FREQ); // find loudest frequency in the spectrum
+		P = analogRead(POT_PIN) / 1024.0; // use potentiometer value as P gain
+		mmErrOld = mmErr; // save previous value to calculate derivative with it
+		mmErr = mmError(peakFreq); // find signed distance to nearest good length [mm]
+		deriv = (mmErr - mmErrOld) / SAMPLING_PERIOD; // approximate time derivative of error [mm/s]
+		slideTo(servoX - P * mmErr + D * deriv); // move inversely to error but proportionally to the derivative of error
 		updateLEDs(mmErr, LG_TOL); // indicate servo position with LEDs
 		
 		// Serial.print("freq   = "); Serial.println(peakFreq);
 		// Serial.print("mmErr  = "); Serial.println(mmErr);
 	}
-	
-	Serial.print("volume = "); Serial.println(volume);
 }
+
+
+/*
+	finds the frequency of the highest peak of the FFT output.
+	copied from the arduinoFFT library: https://github.com/kosme/arduinoFFT
+*/
+double majorPeak(int16_t *vD, int16_t samples, double samplingFrequency)
+{
+	double maxY = 0;
+	uint16_t IndexOfMaxY = 0;
+	// If sampling_frequency = 2 * max_frequency in signal,
+	// value would be stored at position samples/2
+	for (uint16_t i = 1; i < ((samples >> 1) + 1); i++)
+	{
+		if ((vD[i-1] < vD[i]) && (vD[i] > vD[i+1]))
+		{
+			if (vD[i] > maxY)
+			{
+				maxY = vD[i];
+				IndexOfMaxY = i;
+			}
+		}
+	}
+	double delta = 0.5 * ((vD[IndexOfMaxY-1] - vD[IndexOfMaxY+1]) / (vD[IndexOfMaxY-1] - (2.0 * vD[IndexOfMaxY]) + vD[IndexOfMaxY+1]));
+	double interpolatedX = ((IndexOfMaxY + delta)  * samplingFrequency) / (samples-1);
+	if(IndexOfMaxY==(samples >> 1)) // To improve calculation on edge values
+		interpolatedX = ((IndexOfMaxY + delta)  * samplingFrequency) / (samples);
+	// returned value: interpolated frequency peak apex
+	return(interpolatedX);
+}
+
 
 /*
 	finds the signed distance (in millimeters) to the nearest valid note
@@ -278,7 +308,7 @@ void updateLEDs(double pitchCorr, double tol)
 }
 
 /*
-	conversion formulas
+	conversion formulas / simple things
 */
 
 // from http://hyperphysics.phy-astr.gsu.edu/hbase/Waves/clocol.html#c1
@@ -303,4 +333,20 @@ double pitch2Freq(double pitch)
 double rad2deg(double x)
 {
 	return x * 57.2957795131; // pre-evaluated 180/pi
+}
+
+// find max element in array
+int16_t findMax(int16_t* array, int array_lg)
+{
+	int16_t max = array[0];
+	
+	for (int i = 1; i < array_lg; i++)
+	{
+		if (array[i] > max)
+		{
+			max = array[i];
+		}
+	}
+	
+	return max;
 }
