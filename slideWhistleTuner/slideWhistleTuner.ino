@@ -29,7 +29,7 @@ const int LED_GOOD = 12; // digital out
 const int LED_LENGTHEN = 13; // digital out
 
 // microphone
-const int MIN_LOUDNESS = 20; // minimum sample loudness to consider as a signal (0 - 511)
+const int MIN_LOUDNESS = 10; // minimum sample loudness to consider as a signal (0 - 511)
 
 // FFT
 const int SAMPLING_FREQ = 4096; // [Hz] - must be twice the highest expected frequency
@@ -45,13 +45,13 @@ Servo servo;
 const int SERVO_MIN = 470; // minimum pulse length (microseconds)
 const int SERVO_MAX = 2620; // maximum pulse length (microseconds)
 const double SERVO_ARM_LG = 15.0; // [mm]
-const double LG_TOL = 5; // how close the slide has to be to its ideal position before the green light turns on [mm]
+const double LG_TOL = 1; // how close the slide has to be to its ideal position before the green light turns on [mm]
 double servoX = 0; // position of scotch yoke relative to arduino [mm]
 
 // PID control loop
-double P = 0; // proportional term in PID control - adjusted by potentiometer
-double I = 0; // integral term in PID control (not yet implemented - TODO)
-double D = 4; // derivative term in PID control
+double P = 0.0; // proportional term in PID control - ADJUSTED BY POTENTIOMETER
+double I = 0.0; // integral term in PID control (not yet implemented - TODO)
+double D = 0.0; // derivative term in PID control
 
 double mmErr = 0; // signed distance to nearest good length [mm]
 double integ = 0; // sum of error over time [mm] (not yet implemented - TODO)
@@ -73,25 +73,25 @@ double mmErrOld = 0; // the previous mmErr (used to calculate deriv)
 // 	84, 86, 88, 91, 93, 96
 // };
 
-// c major
-const int PITCH_CT = 29;
-const int PITCHES[PITCH_CT] =
-{
-	48, 50, 52, 53, 55, 57, 59,
-	60, 62, 64, 65, 67, 69, 71,
-	72, 74, 76, 77, 79, 81, 83,
-	84, 86, 88, 89, 91, 93, 95, 96
-};
-
-// // c minor
+// // c major
 // const int PITCH_CT = 29;
 // const int PITCHES[PITCH_CT] =
 // {
-// 	48, 50, 51, 53, 55, 56, 58,
-// 	60, 62, 63, 65, 67, 68, 70,
-// 	72, 74, 75, 77, 79, 80, 82,
-// 	84, 86, 87, 89, 91, 92, 94, 96
+// 	48, 50, 52, 53, 55, 57, 59,
+// 	60, 62, 64, 65, 67, 69, 71,
+// 	72, 74, 76, 77, 79, 81, 83,
+// 	84, 86, 88, 89, 91, 93, 95, 96
 // };
+
+// c minor
+const int PITCH_CT = 29;
+const int PITCHES[PITCH_CT] =
+{
+	48, 50, 51, 53, 55, 56, 58,
+	60, 62, 63, 65, 67, 68, 70,
+	72, 74, 75, 77, 79, 80, 82,
+	84, 86, 87, 89, 91, 92, 94, 96
+};
 
 // // chromatic
 // const int PITCH_CT = 49;
@@ -155,16 +155,19 @@ void loop()
 		
 		// analyze the FFT output and take action
 		peakFreq = majorPeak(spectrum, FFT_N, SAMPLING_FREQ); // find loudest frequency in the spectrum
-		P = analogRead(POT_PIN) / 1024.0; // use potentiometer value as P gain
+		P = analogRead(POT_PIN) / 1024.0 * 5.0; // use potentiometer value as P gain (scale to 0-3)
 		mmErrOld = mmErr; // save previous value to calculate derivative with it
 		mmErr = mmError(peakFreq); // find signed distance to nearest good length [mm]
 		deriv = (mmErr - mmErrOld) / SAMPLING_PERIOD; // approximate time derivative of error [mm/s]
-		slideTo(servoX - P * mmErr + D * deriv); // move inversely to error but proportionally to the derivative of error
+		integ += I * mmErr; // sum of error over time
+		slideTo(-P*mmErr - integ + D*deriv); // move inversely to error but proportionally to the derivative of error
 		updateLEDs(mmErr, LG_TOL); // indicate servo position with LEDs
 		
 		// Serial.print("freq   = "); Serial.println(peakFreq);
-		// Serial.print("mmErr  = "); Serial.println(mmErr);
 	}
+	Serial.print("mmErr  = "); Serial.print(mmErr);
+	Serial.print("integ  = "); Serial.print(integ);
+	Serial.print("deriv  = "); Serial.println(deriv);
 }
 
 
@@ -264,17 +267,17 @@ double pitchError(double pitchIn)
 */
 void slideTo(double x)
 {
-	if (x < -SERVO_ARM_LG || SERVO_ARM_LG < x) // if x is too big or too small
-	{
-		// move home to hopefully find a different note to snap to
-		servoX = 0;
-		servo.write(90);
-	}
-	else
+	if (-SERVO_ARM_LG < x && x < SERVO_ARM_LG) // if x is within range
 	{
 		// move to the specified x
 		servoX = x;
 		servo.write(rad2deg(acos(servoX / SERVO_ARM_LG)));
+	}
+	else
+	{
+		// // move home to hopefully find a different note to snap to
+		// servoX = 0;
+		// servo.write(90);
 	}
 }
 
